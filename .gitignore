@@ -1,0 +1,7 @@
+# 真实配置保留在本机；公开仓库使用空密钥的example配置。
+config/geobridge_ts.toml
+config/*.local.toml
+runs/
+__pycache__/
+.pytest_cache/
+*.pyc

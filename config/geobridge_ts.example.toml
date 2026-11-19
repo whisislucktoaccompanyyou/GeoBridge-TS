@@ -1,0 +1,140 @@
+# 公开仓库的完整正式配置模板：先复制为 geobridge_ts.toml，再填写本机参数。
+# Python 3.11+，所有相对路径相对此TOML；服务器路径、输出与训练参数主要改这里。
+# 同目录 smoke.toml 仅供模拟检查，不会与本文件合并。地址和密钥直接填下面的 [gateway]。
+# local.toml 只是可选个人副本，只有 --config 显式指定才读取；不必另建。
+experiment = "geobridge_ts"
+seed = 2026
+mock = false # 正式配置禁止读取 smoke-run 的模拟数据/检查点
+
+[paths]
+data_root = ".." # manifest 内相对路径的统一根目录；服务器可改为 /data/fundus
+input_manifest = "../manifests/input.jsonl" # 原图清单，含明确 train/val/test、subject_id
+accepted_manifest = "../runs/geobridge_ts/default/accepted.jsonl"
+run_dir = "../runs/geobridge_ts/default" # 日志、检查点、伪标签和最终合成图均写入这里
+prompt_file = "../prompts/vessel_segmentation.api.txt" # 已按用户授权生成逐张API版；原版同目录保留
+
+[gateway]
+provider = "gpt"
+base_url = "https://sub2api.aiproxyapp.top/" # 截图地址，仅作记录，程序不自动拼接路由
+request_url = "https://sub2api.aiproxyapp.top/v1/responses" # 已通过21_training.png单张识图测试；根地址是网页
+api_key = "" # 复制为本机主配置后填写真实密钥；公开example不保存密钥。
+protocol = "openai_responses" # 截图 Responses（原生）；也支持 openai_chat_completions/custom_json
+model = "gpt-6.1-sol"
+auth_header = "Authorization"
+auth_prefix = "Bearer "
+response_profile = "" # live probe 后人工核实；支持 binary_png_base64 / binary_png_url / rle / pixel_array
+response_field = "" # 响应 JSON 的明确字段路径，如 output.0.content.0.text；不递归猜测
+profile_verified = false # 单张真实响应核查后才设 true，批量阶段强制要求
+foreground_value = 255 # 服务掩膜中表示血管的值，支持显式 0/255 极性转换
+rle_order = "F" # COCO 非压缩 counts 使用列优先 F；不猜测压缩字符串编码
+connect_timeout_seconds = 10
+read_timeout_seconds = 180
+max_attempts = 3
+max_retry_delay_seconds = 30
+concurrency = 1 # 首版明确串行；不接受其他值
+requests_per_minute = 6
+max_requests = 1 # 每次运行实际 HTTP 请求总上限，含重试；批量时手动设置有限预算
+retry_ambiguous = false # 超时/崩溃后默认不重发，避免无法确认的重复计费
+retry_failed = false # 修改认证/协议后若需重试已失败任务，显式设true；有效结果仍默认复用
+idempotency_header = "" # 仅当中转站明确支持时填写，例如 Idempotency-Key
+max_image_bytes = 20000000 # API 输入原分辨率 RGB，不随本地训练缩放
+max_response_bytes = 30000000
+download_allowed_hosts = [] # URL 掩膜下载的明确主机白名单；不转发 API 认证
+extra_body = {} # 例如 max_output_tokens；禁止覆盖 model/input/messages/认证
+# custom_json 必须显式提供 request_template，并含 {{model}}、{{prompt}}、{{image}}
+
+[sources]
+# 可选清单构建器的原始数据目录。服务器上均在此处填写绝对路径。
+unlabeled_images = "" # Kaggle优质子集原图目录
+unlabeled_fov = "" # 与Kaggle图对应的有效视野目录
+labeled_images = "" # 人工标注原图目录
+labeled_masks = "" # 人工血管掩膜目录
+labeled_fov = "" # 人工标注数据的有效视野目录
+metadata_csv = "../manifests/metadata.csv" # 用户确认的 sample/subject/split/文件对应表
+index_output_csv = "../manifests/metadata.template.csv" # --index 只索引图像，不猜测受试者或划分
+
+[quality]
+min_foreground_fraction = 0.001
+max_foreground_fraction = 0.45
+max_components = 10000 # 仅质量筛查，不自动删支、补线或修改候选掩膜
+
+[data]
+image_size = 384 # 等比例 letterbox，所有配对同步；API 不使用此尺寸
+require_fov = true # 明确 FOV 文件；不以血管 P 代替 V
+allow_mock = false
+
+[model]
+backend = "legacy" # 正式复用原 MEDIA_CDARL UNet + SPADE；tiny 仅用于功能检查
+inner_channels = 64
+channel_mults = [1, 1, 2, 2, 4, 4]
+attention_resolutions = [24]
+res_blocks = 2
+bridge_channels = 32
+bridge_mults = [1, 2, 4, 4]
+diffusion_steps = 2000
+beta_start = 0.000001
+beta_end = 0.01
+g0_timestep = 1999 # 高噪声减少复制参考旧血管；需要实测条件控制
+
+[training]
+device = "cuda:0" # 当前机器只有 CPU；服务器按实际设备修改
+batch_size = 1 # 每个 A/C/U 路各 1 个，同一学生累计三路梯度后更新一次
+num_workers = 0 # 首版同步采样，完整保存随机数与采样状态
+amp = true
+checkpoint_every = 100
+validate_every = 100
+gradient_clip = 5.0
+g0_steps = 0 # 用户必填正整数；0 不启动正式训练，不能代替充分训练预算
+warmup_steps = 0
+bridge_steps = 0
+student_steps = 0
+g0_lr = 0.0001
+discriminator_lr = 0.0001
+warmup_lr = 0.0001
+bridge_lr = 0.0001
+student_lr = 0.0001
+g0_reconstruction_weight = 1.0
+g0_adversarial_weight = 0.1
+g0_denoising_weight = 1.0
+lambda_a = 1.0
+lambda_c = 0.5
+lambda_u = 0.1
+u_ramp_steps = 1000
+ema_decay = 0.99
+weak_predictions = 3
+confidence_threshold = 0.9
+uncertainty_threshold = 0.01
+
+[bridge]
+reference_variance = 0.01 # ε：单位时间每坐标布朗方差；研究起点，必须在目标数据上标定
+cost_reduction = "sum" # 0.5*sum；mean 时 Sinkhorn 熵系数自动同步除以坐标数
+source_candidates = 2
+target_candidates = 2
+sinkhorn_tolerance = 0.000001
+sinkhorn_max_iterations = 10000
+delta = 0.001
+sampling_steps = 50
+
+[gpg]
+every = 5
+iterations = 3
+learning_rate = 0.1 # 梯度按有效图像坐标数缩放后应用；有回溯保证能量不增
+max_pixel_change = 0.03 # 相对本次清晰终点的逐像素最大改变量
+prox_weight = 1.0 # 必须 >0
+mask_weight = 1.0
+boundary_weight = 0.1
+kappa_max = 1.0 # κ(t)=κmax*t，早期较弱，末端再执行一次纠正
+
+[synthesis]
+seed = 2026
+reference_policy = "different_training_subject" # 推理参考仅来自不同训练受试者，不将对应目标X输入完整B
+quality_approved = false # 查看 G0/SB/GPG 真正输出后设 true；smoke 不证明生成质量
+
+[evaluation]
+threshold = 0.5 # 使用验证集校准后固定；不在测试集搜索阈值
+checkpoint = "student_best.pt" # 相对 run_dir/checkpoints；可设 student_last.pt
+
+[inference]
+input_image = "" # 新真实眼底图，推理不需要外部API或B
+output_dir = "../runs/geobridge_ts/predictions"
+student_checkpoint = "" # 空值使用本次run_dir/checkpoints/student_best.pt

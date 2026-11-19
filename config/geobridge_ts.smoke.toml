@@ -1,0 +1,138 @@
+# 独立CPU小规模模拟配置。只能运行 smoke-run；远程中转站调用被禁止。
+# 流程自动创建本机模拟HTTP、临时虚拟认证与独立输出，不使用真实数据。
+# 正式训练请编辑并使用 geobridge_ts.toml；两份TOML不会自动合并。
+# smoke-run会在内存中覆盖部分参数以隔离模拟流程，不用于正式参数调优。
+experiment = "geobridge_ts"
+seed = 2026
+mock = true
+
+[paths]
+data_root = "../runs/geobridge_ts/smoke_manual"
+input_manifest = "../runs/geobridge_ts/smoke_manual/input.jsonl"
+accepted_manifest = "../runs/geobridge_ts/smoke_manual/accepted.jsonl"
+run_dir = "../runs/geobridge_ts/smoke_manual"
+prompt_file = "../prompts/vessel_segmentation.api.txt"
+
+[gateway]
+provider = "codex15行"
+base_url = "https://sub2api.aiproxyapp.top/"
+request_url = "http://127.0.0.1:1/responses"
+api_key = ""
+protocol = "openai_responses"
+model = "gpt-6.1-sol"
+auth_header = "Authorization"
+auth_prefix = "Bearer "
+response_profile = ""
+response_field = ""
+profile_verified = false
+foreground_value = 255
+rle_order = "F"
+connect_timeout_seconds = 10
+read_timeout_seconds = 180
+max_attempts = 3
+max_retry_delay_seconds = 30
+concurrency = 1
+requests_per_minute = 6
+max_requests = 1
+retry_ambiguous = false
+retry_failed = false
+idempotency_header = ""
+max_image_bytes = 20000000
+max_response_bytes = 30000000
+download_allowed_hosts = []
+extra_body = {}
+
+[sources]
+unlabeled_images = ""
+unlabeled_fov = ""
+labeled_images = ""
+labeled_masks = ""
+labeled_fov = ""
+metadata_csv = "../manifests/metadata.csv"
+index_output_csv = "../manifests/metadata.template.csv"
+
+[quality]
+min_foreground_fraction = 0.001
+max_foreground_fraction = 0.45
+max_components = 10000
+
+[data]
+image_size = 32
+require_fov = true
+allow_mock = true
+
+[model]
+backend = "tiny"
+inner_channels = 64
+channel_mults = [1, 1, 2, 2, 4, 4]
+attention_resolutions = [24]
+res_blocks = 2
+bridge_channels = 8
+bridge_mults = [1, 2]
+diffusion_steps = 20
+beta_start = 0.000001
+beta_end = 0.01
+g0_timestep = 19
+
+[training]
+device = "cpu"
+batch_size = 1
+num_workers = 0
+amp = false
+checkpoint_every = 100
+validate_every = 100
+gradient_clip = 5.0
+g0_steps = 2
+warmup_steps = 2
+bridge_steps = 2
+student_steps = 2
+g0_lr = 0.0001
+discriminator_lr = 0.0001
+warmup_lr = 0.0001
+bridge_lr = 0.0001
+student_lr = 0.0001
+g0_reconstruction_weight = 1.0
+g0_adversarial_weight = 0.1
+g0_denoising_weight = 1.0
+lambda_a = 1.0
+lambda_c = 0.5
+lambda_u = 0.1
+u_ramp_steps = 1000
+ema_decay = 0.99
+weak_predictions = 3
+confidence_threshold = 0.9
+uncertainty_threshold = 0.01
+
+[bridge]
+reference_variance = 10.0
+cost_reduction = "sum"
+source_candidates = 2
+target_candidates = 2
+sinkhorn_tolerance = 0.000001
+sinkhorn_max_iterations = 10000
+delta = 0.001
+sampling_steps = 3
+
+[gpg]
+every = 1
+iterations = 2
+learning_rate = 0.1
+max_pixel_change = 0.03
+prox_weight = 1.0
+mask_weight = 1.0
+boundary_weight = 0.1
+kappa_max = 1.0
+
+[synthesis]
+seed = 2026
+reference_policy = "different_training_subject"
+quality_approved = false
+
+[evaluation]
+threshold = 0.5
+checkpoint = "student_best.pt"
+
+[inference]
+input_image = ""
+output_dir = "../runs/geobridge_ts/predictions"
+student_checkpoint = ""
