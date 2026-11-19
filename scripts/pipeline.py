@@ -37,7 +37,8 @@ def main():
             parser.error('api-probe必须显式选择--dry-run或--live')
         if args.manifest:
             c['paths']['input_manifest'] = str((Path(c['_config_path']).parent/args.manifest).resolve())
-        rows = read_manifest(c['paths']['input_manifest'], c['paths']['data_root'], c['data']['allow_mock'], c['data']['require_fov'])
+        # Segmentation requests need only the source image and prompt. FOV remains mandatory for QC and training.
+        rows = read_manifest(c['paths']['input_manifest'], c['paths']['data_root'], c['data']['allow_mock'], require_fov=False)
         result = run_gateway(c, rows, args.limit if args.limit is not None else (1 if args.stage == 'api-probe' else None),
                              probe=args.stage == 'api-probe', dry_run=args.dry_run)
     elif args.stage == 'pseudo-qc':
